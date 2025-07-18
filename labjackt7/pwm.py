@@ -41,3 +41,8 @@ class PWM:
         channel = self._chan_to_dio(channel)
         self.labjack._command(f"{channel}_EF_ENABLE", 0)
         self.labjack.digital.dout(channel, 0)
+
+    def _chan_to_dio(self, channel):
+        if type(channel) is int:
+            channel = f'DIO{channel}'
+        return channel
