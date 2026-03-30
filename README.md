@@ -1,17 +1,17 @@
-# labyak
-High-level wrappers around the [LJM Python](https://github.com/labjack/labjack-ljm-python) library for data acquisition and waveform or pattern generation with the [LabJack T7](https://labjack.com/products/t7). Labyak does not yet officially support the LabJack T4, but it should be mostly compatible.
+# LabjackT7
+High-level wrappers around the [LJM Python](https://github.com/labjack/labjack-ljm-python) library for data acquisition and waveform or pattern generation with the [LabJack T7](https://labjack.com/products/t7). 
 
 To install with pip and git, run the following from the command line:
 
-``` pip install git+http://github.com/robertfasano/labyak.git ```
+``` pip install git+https://github.com/jheilman-resoundant/LabjackT7.git ```
 
 ## Tutorial
 See the Jupyter notebook "Examples.ipynb" for a runnable version.
 
 ### Connecting to a device
 ```python 
-  from labyak import LabJack
-  labjack = LabJack()
+  from labjackt7 import LabjackT7
+  labjack = LabjackT7()
 ```
 ### Analog I/O
 Generate 1 V on channel DAC0 and measure it on ADC0:

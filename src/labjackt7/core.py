@@ -3,7 +3,7 @@ from labjack import ljm
 from labjackt7 import Analog, Digital, Temperature, PWM, SPI, I2C, Stream, WaveformGenerator, PatternGenerator
 
 class LabjackT7():
-    def __init__(self, device='T7', connection='ANY', device_identifier='ANY', verbose='True'):
+    def __init__(self, device='T7', connection='ANY', device_identifier='ANY', verbose=True):
         '''
         device: T7 (default) or T4
         connection: ethernet, usb...
@@ -16,10 +16,11 @@ class LabjackT7():
                                     connection,
                                     device_identifier)
             info = ljm.getHandleInfo(self.handle)
-            assert info[0] in [ljm.constants.dtT7, ljm.constants.dtT4]
+            if info[0] not in [ljm.constants.dtT7, ljm.constants.dtT4]:
+                raise ValueError(f'Unsupported LabJack device type: {info[0]}')
         except Exception as e:
             print(f'Failed to connect to LabJack ({connection} {device_identifier}): {e}.')
-            return
+            raise
         self.device_type = info[0]
         self.connection_type = info[1]
         self.serial_number = info[2]
@@ -52,7 +53,7 @@ class LabjackT7():
         return ljm.eReadName(self.handle, register)
 
     def _read_array(self, register, num_bytes):
-        return ljm.eReadNameByteArray(self.handle, "I2C_DATA_RX", read_bytes)
+        return ljm.eReadNameByteArray(self.handle, register, num_bytes)
 
     def _command(self, register, value):
         ''' Writes a value to a specified register.
@@ -63,7 +64,7 @@ class LabjackT7():
                 '''
         ljm.eWriteName(self.handle, register, value)
 
-    def _write(**kwargs):
+    def _write(self, **kwargs):
         ''' Updates registers according to the passed keyword arguments. For
             example, to set DAC0 to 1 and DAC1 to 0 we would call
                 self._write(DAC0=1, DAC1=0)
@@ -81,7 +82,7 @@ class LabjackT7():
         ''' Stop streaming if currently running '''
         try:
             ljm.eStreamStop(self.handle)
-        except:
+        except Exception:
             pass
 
 if __name__ == '__main__':
