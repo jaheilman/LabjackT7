@@ -8,7 +8,7 @@ class Digital():
     def __init__(self, labjack):
         self.labjack = labjack
 
-    def din(self, channel) -> int:
+    def din(self, channel: int | str) -> int:
         ''' Read a digital signal.
 
             Args:
@@ -16,34 +16,39 @@ class Digital():
             Return:
                 state (int): 1 or 0
         '''
-        channel = self._chan_to_str(channel)
+        channel = self._chan_to_dio(channel)
         return int(self.labjack._query(channel))
 
-    def dout(self, channel, state:int):
+    def dout(self, channel:int | str, state:int):
         ''' Output a digital signal.
 
             Args:
                 channel (str or int): a digital channel on the LabJack, e.g. 'FIO4'.
                 state (int): 1 or 0
         '''
-        channel = self._chan_to_str(channel)
+        state = int(bool(state))
+        channel = self._chan_to_dio(channel)
         self.labjack._command(channel, state)
 
-    def dout_multi(self, channels:list, states:list):
+    def dout_multi(self, channels:list[int|str], states:list):
         ''' Set multiple digital channels simultaneously. 
         
             Args:
-                channels (list of numbers): numerical channels (str NOT supported)
+                channels: integer or DIO/FIO
                 states (list of 1/0): 1's or 0's
         '''
-        bitstate = 0
-        for i in range(len(channels)):
-            bitstate = bitstate | (states[i] << channels[i])
+        if len(channels) != len(states):
+            raise ValueError(f"Length mismatch between channels {len(channels)} and states {len(states)}")
+        channels = [self._chan_to_int(ch) for ch in channels]
+        states = [int(bool(state)) for state in states]
 
         bitmask = self.bitmask(channels)
-        self.labjack._write_dict({'DIO_INHIBIT':   0x7FFFFF-bitmask,
-                                  'DIO_DIRECTION': bitmask,
-                                  'DIO_STATE':     bitstate})
+        bitstate = self.state(channels, states)
+        self.labjack._write_dict({
+            'DIO_INHIBIT':   0x7FFFFF-bitmask,
+            'DIO_DIRECTION': bitmask,
+            'DIO_STATE':     bitstate
+        })
 
     @staticmethod
     def inhibit_string(channels):
@@ -70,7 +75,7 @@ class Digital():
         return y
 
     @staticmethod
-    def bitmask(channels):
+    def bitmask(channels:list):
         bm = 0
         for ch in channels:
             bm |= 1 << ch
@@ -79,12 +84,18 @@ class Digital():
     @staticmethod
     def state(channels, states):
         ''' Returns a bitmask representation of the passed channels and states. '''
+        states = [int(bool(s)) for s in states]
         bitmask = 0
         for j in range(len(channels)):
-            bitmask = bitmask | (int(states[j]) << channels[j])
+            bitmask = bitmask | (states[j] << channels[j])
         return bitmask
 
     def _chan_to_dio(self, channel):
-        if type(channel) is int:
+        if isinstance(channel,  int):
             channel = f'DIO{channel}'
+        return channel
+    
+    def _chan_to_int(self, channel):
+        if isinstance(channel, str):
+            channel = int(''.join(c for c in channel if '0' <= c <= '9'))
         return channel
