@@ -6,36 +6,48 @@ from datetime import datetime
 
 class StreamConfig():
     def __init__(self, settling_time=0, resolution_index=0, clock_source=0):
-        self.stream_config_dict = {
-            'STREAM_SETTLING_US': settling_time,
-            'STREAM_RESOLUTION_INDEX': resolution_index,
-            'STREAM_CLOCK_SOURCE': clock_source,
+        self.settling_time = settling_time
+        self.resolution_index = resolution_index
+        self.clock_source = clock_source
+
+    def to_dict(self):
+        return {
+            'STREAM_SETTLING_US': self.settling_time,
+            'STREAM_RESOLUTION_INDEX': self.resolution_index,
+            'STREAM_CLOCK_SOURCE': self.clock_source,
         }
-                    
+
 class Stream():
-    def __init__(self, labjack):
+    def __init__(self, labjack, config: StreamConfig | None = None):
         self.labjack = labjack
-        self.configure()
+        if isinstance(config, StreamConfig):
+            self.config = config
+            self.configure_options(self.config.to_dict())
+        self.configure_options(self.config)
 
     def configure(self, settling_time=0, resolution_index=0, clock_source=0):
-        self.stop()
-        self.labjack._write_dict({
-            'STREAM_SETTLING_US': settling_time,
-            'STREAM_RESOLUTION_INDEX': resolution_index,
-            'STREAM_CLOCK_SOURCE': clock_source
-        })
-        #STREAM_TRIGGER_INDEX
+        self.config = StreamConfig(
+            settling_time=settling_time,
+            resolution_index=resolution_index,
+            clock_source=clock_source,
+        )
+        self.configure_options(self.config)
 
-    def configure_from_dict(self, stream_options: dict):
-        self.labjack._write_dict(stream_options)
+    def configure_options(self, stream_options: dict | StreamConfig):
+        self.stop()
+        if isinstance(stream_options, StreamConfig):
+            self.labjack._write_dict(stream_options.to_dict())
+        else:
+            self.labjack._write_dict(stream_options)
 
     def set_inhibit(self, channels):
         bitmask = self.labjack.digital.bitmask(channels)
         inhibit = 0x7FFFFF-bitmask
 
-        self.labjack._write_dict({'DIO_INHIBIT': inhibit,
-                                  'DIO_DIRECTION': bitmask
-                                  })
+        self.labjack._write_dict({
+            'DIO_INHIBIT': inhibit,
+            'DIO_DIRECTION': bitmask
+        })
 
     def stop(self):
         ''' Stop streaming if currently running '''
@@ -60,7 +72,7 @@ class Stream():
     #     scanRate /= array.shape[1]    ## divide by number of channels being streamed
     #     return stream, scanRate
 
-    def stream_burst(self, aScanListNames:list, scanRate:int=0, scanTime_s:float=1) -> list:
+    def stream_burst(self, aScanListNames:list, scanRate:int=0, scanTime_s:float=1) -> tuple[int,list]:
         ''' 
             Args:
                 scanListNames: ["AIN0", "AIN1"] etc
@@ -101,16 +113,15 @@ class Stream():
         self.stop()
         n = np.ceil(np.log10(2*(1+len(data)))/np.log10(2))
         buffer_size = 2**n
-        i = 0
         scan_list = []
-        for ch in channels:
+        for i, ch in enumerate(channels):
             self.labjack._write_dict({
                 f'STREAM_OUT{i}_TARGET': ch,
                 f'STREAM_OUT{i}_BUFFER_SIZE': buffer_size,
                 f'STREAM_OUT{i}_ENABLE': 1
             })
 
-            target = ['STREAM_OUT%i_BUFFER_%s'%(i, dtype)] * len(data)
+            target = [f'STREAM_OUT{i}_BUFFER_{dtype}'] * len(data)
             self.labjack._write_array(target, list(data[:, i]))
 
             self.labjack._write_dict({
@@ -118,15 +129,15 @@ class Stream():
                 f'STREAM_OUT{i}_SET_LOOP': 1
             })
             scan_list.append(4800+i)
-            i += 1
         scanRate = ljm.eStreamStart(self.labjack.handle, 1, len(scan_list), scan_list, scanRate)
 
     def set_trigger(self, ch):
         if ch is None:
             self.labjack._command("STREAM_TRIGGER_INDEX", 0) # disable triggered stream
         else:
-            self.labjack._write_dict({f"DIO{ch}_EF_ENABLE": 0
-                              })
+            self.labjack._write_dict({
+                f"DIO{ch}_EF_ENABLE": 0
+            })
             self.labjack._write_dict({
                 f"DIO{ch}_EF_INDEX": 3,
                 f"DIO{ch}_EF_OPTIONS": 12,   ## current value: 0 (PWM Out)
@@ -135,14 +146,16 @@ class Stream():
                 f"DIO{ch}_EF_CONFIG_B": 1,
                 f"DIO{ch}_EF_ENABLE": 1,
                 "STREAM_TRIGGER_INDEX": 2000+ch
-                })
+            })
             ljm.writeLibraryConfigS('LJM_STREAM_RECEIVE_TIMEOUT_MS',0)  #disable timeout
 
-    def _device_scanRate(self):
+    def _device_scanRate(self) -> int:
         if self.labjack.device_type == ljm.constants.dtT7:
             return 100000
         elif self.labjack.device_type == ljm.constants.dtT4:
             return 40000
+        print("ERROR - device type unknown, cannot determine scan rate")
+        return 40000
 
     def _reshape_data(self, aData:list, num_channels:int):
         ''' splits scan data into list of lists'''
