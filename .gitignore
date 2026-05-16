@@ -3,3 +3,4 @@ venv/
 *.egg-info/
 /src/labjackt7/__pycache__/
 __pycache__/
+/.codex

@@ -22,8 +22,9 @@ class Stream():
         self.labjack = labjack
         if isinstance(config, StreamConfig):
             self.config = config
-            self.configure_options(self.config.to_dict())
-        self.configure_options(self.config)
+            self.configure_options(self.config)
+        else:
+            self.configure()
 
     def configure(self, settling_time=0, resolution_index=0, clock_source=0):
         self.config = StreamConfig(
@@ -93,43 +94,118 @@ class Stream():
             print(f"WARNING: some samples were skipped! Total skips, all channels) = f{aData.count(-9999.0)}")
         return scanRate, self._reshape_data(aData, len(aScanList))
 
-    def stream_start(self, channels:list, scan_rate):
-        self.stop()
-        scan_list = ljm.namesToAddresses(len(channels), channels)[0]
-
-        scans_per_read = int(scan_rate/2)
-        ljm.eStreamStart(self.labjack.handle, scans_per_read, len(channels), scan_list, scan_rate)
+    def stream_start(self, channels:list, scan_rate, scans_per_read=None, stream_out=None):
+        return self.stream_in_out(
+            input_channels=channels,
+            scan_rate=scan_rate,
+            scans_per_read=scans_per_read,
+            stream_out=stream_out,
+        )
 
     def stream_read(self):
         return ljm.eStreamRead(self.labjack.handle)
 
     def aout(self, channels, data, scanRate, loop=0):
-        self._start([1000+2*ch for ch in channels], data, scanRate, loop=loop, dtype='F32')
+        array = np.asarray(data)
+        if array.ndim == 1:
+            if len(channels) != 1:
+                raise ValueError("Analog stream-out data must have one column per output channel.")
+            output_data = [array]
+        elif array.ndim == 2 and array.shape[1] == len(channels):
+            output_data = [array[:, i] for i in range(array.shape[1])]
+        else:
+            raise ValueError("Analog stream-out data must be 1-D for one channel or 2-D with one column per channel.")
+
+        self.stream_in_out(
+            input_channels=[],
+            scan_rate=scanRate,
+            scans_per_read=1,
+            stream_out=[
+                {
+                    'target': 1000 + 2*ch,
+                    'data': output_data[i],
+                    'dtype': 'F32',
+                    'loop': loop,
+                }
+                for i, ch in enumerate(channels)
+            ],
+        )
 
     def dout(self, data, scanRate, loop=0):
-        self._start([2500], data, scanRate, loop=loop, dtype='U16')
+        self.stream_in_out(
+            input_channels=[],
+            scan_rate=scanRate,
+            scans_per_read=1,
+            stream_out=[{
+                'target': 2500,
+                'data': data,
+                'dtype': 'U16',
+                'loop': loop,
+            }],
+        )
 
-    def _start(self, channels, data, scanRate, loop = 0, dtype='F32'):
+    def stream_in_out(self, input_channels:list, scan_rate, scans_per_read=None, stream_out=None):
         self.stop()
-        n = np.ceil(np.log10(2*(1+len(data)))/np.log10(2))
-        buffer_size = 2**n
-        scan_list = []
-        for i, ch in enumerate(channels):
-            self.labjack._write_dict({
-                f'STREAM_OUT{i}_TARGET': ch,
-                f'STREAM_OUT{i}_BUFFER_SIZE': buffer_size,
-                f'STREAM_OUT{i}_ENABLE': 1
-            })
+        stream_out = stream_out or []
+        scan_list = list(ljm.namesToAddresses(len(input_channels), input_channels)[0]) if input_channels else []
 
-            target = [f'STREAM_OUT{i}_BUFFER_{dtype}'] * len(data)
-            self.labjack._write_array(target, list(data[:, i]))
+        for index, output in enumerate(stream_out):
+            self._configure_stream_out(index, output)
+            scan_list.append(4800 + index)
 
-            self.labjack._write_dict({
-                f'STREAM_OUT{i}_LOOP_SIZE': loop*len(data),
-                f'STREAM_OUT{i}_SET_LOOP': 1
-            })
-            scan_list.append(4800+i)
-        scanRate = ljm.eStreamStart(self.labjack.handle, 1, len(scan_list), scan_list, scanRate)
+        if not scan_list:
+            raise ValueError("At least one input or output channel is required to start stream mode.")
+
+        if scans_per_read is None:
+            scans_per_read = max(1, int(scan_rate / 2))
+
+        return ljm.eStreamStart(
+            self.labjack.handle,
+            scans_per_read,
+            len(scan_list),
+            scan_list,
+            scan_rate,
+        )
+
+    def _configure_stream_out(self, index, output):
+        target = output['target']
+        data = self._stream_out_values(output['data'])
+        dtype = output.get('dtype', 'F32')
+        loop = output.get('loop', 0)
+        buffer_num_bytes = self._stream_out_buffer_num_bytes(len(data))
+
+        self.labjack._write_dict({
+            f'STREAM_OUT{index}_ENABLE': 0,
+            f'STREAM_OUT{index}_TARGET': target,
+            f'STREAM_OUT{index}_BUFFER_ALLOCATE_NUM_BYTES': buffer_num_bytes,
+            f'STREAM_OUT{index}_ENABLE': 1
+        })
+
+        registers = [f'STREAM_OUT{index}_BUFFER_{dtype}'] * len(data)
+        self.labjack._write_array(registers, data)
+
+        loop_num_values = len(data) if loop else 0
+        self.labjack._write_dict({
+            f'STREAM_OUT{index}_LOOP_NUM_VALUES': loop_num_values,
+            f'STREAM_OUT{index}_SET_LOOP': 1
+        })
+
+    def _stream_out_values(self, data):
+        array = np.asarray(data)
+        if array.ndim == 0:
+            return [array.item()]
+        if array.ndim == 1:
+            return array.tolist()
+        if array.ndim == 2 and array.shape[1] == 1:
+            return array[:, 0].tolist()
+        raise ValueError("Stream-out data must be one-dimensional per output channel.")
+
+    def _stream_out_buffer_num_bytes(self, num_values):
+        if num_values <= 0:
+            raise ValueError("Stream-out data must contain at least one value.")
+        min_buffer_bytes = 2 * (num_values + 1)
+        exponent = int(np.ceil(np.log2(min_buffer_bytes)))
+        return int(2 ** exponent)
 
     def set_trigger(self, ch):
         if ch is None:
