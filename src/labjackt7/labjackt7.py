@@ -12,9 +12,11 @@ class LabjackT7():
         self.device_type = None
         self.serial_number = None
         try:
-            self.handle = ljm.openS(device,
-                                    connection,
-                                    device_identifier)
+            self.handle = ljm.openS(
+                device,
+                connection,
+                device_identifier
+            )
             info = ljm.getHandleInfo(self.handle)
             if info[0] not in [ljm.constants.dtT7, ljm.constants.dtT4]:
                 raise ValueError(f'Unsupported LabJack device type: {info[0]}')
@@ -77,6 +79,15 @@ class LabjackT7():
     def _write_dict(self, d):
         ''' Writes values to registers according to the passed dictionary. '''
         self._write_array(list(d.keys()), list(d.values()))
+
+    def _device_scanRate(self) -> int:
+        if self.device_type == ljm.constants.dtT7:
+            return 100000
+        elif self.device_type == ljm.constants.dtT4:
+            return 40000
+        print("ERROR - device type unknown, cannot determine scan rate")
+        return 40000
+
 
     def stop(self):
         ''' Stop streaming if currently running '''

@@ -10,13 +10,14 @@ class Temperature:
         '''
         kind = {'J': 21, 'K': 22}[thermocouple_type]
         self.labjack._command(f'AIN{pos_ch}_EF_INDEX', kind)
-        self.labjack._write_dict({f'AIN{pos_ch}_EF_INDEX': kind,
-                                  f'AIN{pos_ch}_EF_CONFIG_B': 60052,
-                                  f'AIN{pos_ch}_EF_CONFIG_D': 1,
-                                  f'AIN{pos_ch}_EF_CONFIG_E': 0,
-                                  f'AIN{pos_ch}_NEGATIVE_CH': neg_ch,
-                                  f'AIN{pos_ch}_RANGE': arange
-                                  })
+        self.labjack._write_dict({
+            f'AIN{pos_ch}_EF_INDEX': kind,
+            f'AIN{pos_ch}_EF_CONFIG_B': 60052,
+            f'AIN{pos_ch}_EF_CONFIG_D': 1,
+            f'AIN{pos_ch}_EF_CONFIG_E': 0,
+            f'AIN{pos_ch}_NEGATIVE_CH': neg_ch,
+            f'AIN{pos_ch}_RANGE': arange
+        })
 
     def temp_in(self, ch):
         ''' Returns the temperature of a given channel in degC. '''

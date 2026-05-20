@@ -2,7 +2,7 @@
 from enum import auto
 from strenum import StrEnum
 
-class T7(StrEnum):
+class T7Channel(StrEnum):
     AIN0  = auto()
     AIN1  = auto()
     AIN2  = auto()
@@ -26,3 +26,15 @@ class T7(StrEnum):
     DIO7  = auto()
     DAC0  = auto()
     DAC1  = auto()
+
+class StreamChannels(StrEnum):
+    DAC0 = auto()
+    DAC1 = auto()
+    FIO_STATE = auto()
+    FIO_DIRECTION = auto()
+    EIO_STATE = auto()
+    EIO_DIRECTION = auto()
+    CIO_STATE = auto()
+    CIO_DIRECTION = auto()
+    MIO_STATE = auto()
+    MIO_DIRECTION = auto()

@@ -1,5 +1,4 @@
 from labjack import ljm
-# from .core import LabjackT7
 # from scipy.signal import resample
 import numpy as np
 from datetime import datetime
@@ -94,13 +93,23 @@ class Stream():
             print(f"WARNING: some samples were skipped! Total skips, all channels) = f{aData.count(-9999.0)}")
         return scanRate, self._reshape_data(aData, len(aScanList))
 
-    def stream_start(self, channels:list, scan_rate, scans_per_read=None, stream_out=None):
-        return self.stream_in_out(
-            input_channels=channels,
-            scan_rate=scan_rate,
-            scans_per_read=scans_per_read,
-            stream_out=stream_out,
-        )
+    # def stream_start(self, channels:list, scan_rate, scans_per_read=None, stream_out=None):
+    #     return self.stream_in_out(
+    #         input_channels=channels,
+    #         scan_rate=scan_rate,
+    #         scans_per_read=scans_per_read,
+    #         stream_out=stream_out,
+    #     )
+
+    # todo:
+    # STREAM_BUFFER_SIZE_BYTES
+    # max RAM 64k, buffer max is 32k (32768).  Default it 4096.  values are 16 bit
+
+    def stream_start(self, channels:list, scan_rate:int):
+        self.stop()
+        scan_list = ljm.namesToAddresses(len(channels), channels)[0]
+        scans_per_read = int(scan_rate/2)
+        ljm.eStreamStart(self.labjack.handle, scans_per_read, len(channels), scan_list, scan_rate)
 
     def stream_read(self):
         return ljm.eStreamRead(self.labjack.handle)
@@ -137,7 +146,7 @@ class Stream():
             scan_rate=scanRate,
             scans_per_read=1,
             stream_out=[{
-                'target': 2500,
+                'target': 4040, # 4040 + 2*ch, ch 0:3
                 'data': data,
                 'dtype': 'U16',
                 'loop': loop,
@@ -178,7 +187,6 @@ class Stream():
             f'STREAM_OUT{index}_ENABLE': 0,
             f'STREAM_OUT{index}_TARGET': target,
             f'STREAM_OUT{index}_BUFFER_ALLOCATE_NUM_BYTES': buffer_num_bytes,
-            f'STREAM_OUT{index}_ENABLE': 1
         })
 
         registers = [f'STREAM_OUT{index}_BUFFER_{dtype}'] * len(data)
@@ -187,7 +195,8 @@ class Stream():
         loop_num_values = len(data) if loop else 0
         self.labjack._write_dict({
             f'STREAM_OUT{index}_LOOP_NUM_VALUES': loop_num_values,
-            f'STREAM_OUT{index}_SET_LOOP': 1
+            f'STREAM_OUT{index}_SET_LOOP': 1,
+            f'STREAM_OUT{index}_ENABLE': 1,
         })
 
     def _stream_out_values(self, data):
