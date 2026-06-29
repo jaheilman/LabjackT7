@@ -16,7 +16,7 @@ class Digital():
             Return:
                 state (int): 1 or 0
         '''
-        channel = self._chan_to_str(channel)
+        channel = self._chan_to_dio(channel)
         return int(self.labjack._query(channel))
 
     def dout(self, channel, state:int):
@@ -26,7 +26,7 @@ class Digital():
                 channel (str or int): a digital channel on the LabJack, e.g. 'FIO4'.
                 state (int): 1 or 0
         '''
-        channel = self._chan_to_str(channel)
+        channel = self._chan_to_dio(channel)
         self.labjack._command(channel, state)
 
     def dout_multi(self, channels:list, states:list):
