@@ -50,7 +50,6 @@ class WaveformGenerator:
             double ScanRate,
             int NumValues,
             const double * aWriteData)
-
         '''
 
         self.stream_out_index = stream_out_index
