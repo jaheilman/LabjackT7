@@ -2,7 +2,11 @@
 _LJ_CLOCK_SPEED = 80e6
 
 '''
-If a PWM is started before a previuos is stopped, you may enter an undefined state (esp if you change channels)
+Only supported by DIO0/2/3/4/5 (aka FIO0/2/3/4/5).
+
+If a PWM is started before a previous is stopped, 
+you may enter an undefined state (especially if you change channels)
+To fix this, the buffers should be freed and the clock released.
 '''
 
 class PWM:
@@ -29,7 +33,7 @@ class PWM:
                 duty_cycle (float): duty cycle between 0 and 1.
         '''
         # todo: check that channel supports PWM
-        self.channel, self.dio_index = self._chan_to_dio(channel)
+        self.channel, self.dio_index = self._pwm_chan_to_dio(channel)
         self.clock_index = clock_index
     
         # set DIO line low before starting
@@ -68,7 +72,7 @@ class PWM:
     def stop(self, channel:int|str|None=None):
         if channel == None:
             channel = self.channel
-        dio, index = self._chan_to_dio(channel)
+        dio, index = self._pwm_chan_to_dio(channel)
         self.labjack._command(f"{dio}_EF_ENABLE", 0)
         self.labjack.digital.dout(dio, 0)
 
@@ -88,7 +92,7 @@ class PWM:
                 frequency (float): desired frequency in Hz
                 duty_cycle (float): duty cycle between 0 and 1.
         '''
-        self.channel = self._chan_to_dio(channel)
+        self.channel, self.dio_index  = self._pwm_chan_to_dio(channel)
         self.clock_index = self.clock_index
 
         # set DIO line low
@@ -144,7 +148,7 @@ class PWM:
     # todo: pulse reset
     # DIO#_EF_READ_A_AND_RESET: Reads the number of pulses that have been completed, then restarts the pulse sequence. If the requested number of pulses has not been completed the count will be restarted.
 
-    def _chan_to_dio(self, channel):
+    def _pwm_chan_to_dio(self, channel) -> tuple[str, int]:
         if isinstance(channel, int):
             dio_index = channel
             channel = f'DIO{channel}'

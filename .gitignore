@@ -4,4 +4,4 @@ venv/
 /src/labjackt7/__pycache__/
 __pycache__/
 /.codex
-host_info.py
+.vscode/
