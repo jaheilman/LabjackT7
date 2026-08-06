@@ -3,7 +3,7 @@ import time
 import numpy as np
 
 from labjackt7 import LabjackT7
-from labjackt7.channels import StreamChannels
+from labjackt7.channels import StreamChannel
 
 
 def main():

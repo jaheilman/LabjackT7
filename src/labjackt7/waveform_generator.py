@@ -1,6 +1,6 @@
 import numpy as np
 from labjack import ljm
-from .channels import StreamChannels
+from .channels import StreamChannel
 
 ''' Setup a periodic stream on a single output channel.
 
@@ -39,7 +39,7 @@ class WaveformGenerator:
         self.scans_per_read = scans_per_read
 
 
-    def add(self, data:list, target:StreamChannels|str, stream_out_index:int = 0):
+    def add(self, data:list, target:StreamChannel|str, stream_out_index:int = 0):
         ''' 
         Setup a periodic output stream on output device 'target' using buffer stream_out_index.
 
@@ -72,7 +72,7 @@ class WaveformGenerator:
         return
     
 
-    def add_many(self, data:list[list], targets:list[StreamChannels|str], stream_out_indexes:list[int]):
+    def add_many(self, data:list[list], targets:list[StreamChannel|str], stream_out_indexes:list[int]):
         if (len(data) != len(targets)) or (len(data) != len(stream_out_indexes)):
             raise ValueError("Length of data, targets, and stream_out_indexes must match")
         for d, t, i in zip(data, targets, stream_out_indexes):

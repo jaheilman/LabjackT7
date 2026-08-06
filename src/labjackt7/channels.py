@@ -27,7 +27,7 @@ class T7Channel(StrEnum):
     DAC0  = auto()
     DAC1  = auto()
 
-class StreamChannels(StrEnum):
+class StreamChannel(StrEnum):
     DAC0 = auto()
     DAC1 = auto()
     FIO_STATE = auto()

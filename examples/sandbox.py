@@ -1,3 +1,3 @@
-mylist = [[1,2],[3,4]]
+mylist = [[1,2,3],[3,4,5]]
 
-print(len(mylist))
+print(len(mylist)) #len is 2
