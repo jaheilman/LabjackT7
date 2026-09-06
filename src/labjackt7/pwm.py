@@ -119,7 +119,7 @@ class PWM:
             f"DIO_EF_CLOCK{clock_source}_ENABLE": 1,
             f"{self.channel}_EF_ENABLE": 0,
             f"{self.channel}_EF_INDEX": 2,  # 0 = PWM output, 2 = pulse output
-            f"{self.channel}_EF_CLOCK_SOURCE": {clock_source}, # replaced by _EF_CLOCK_SOURCE
+            f"{self.channel}_EF_CLOCK_SOURCE": clock_source, # replaced by _EF_CLOCK_SOURCE
             f"{self.channel}_EF_CONFIG_A": self.duty,
             f"{self.channel}_EF_CONFIG_B": 0, # low to high count... for inv or phase??
             f"{self.channel}_EF_CONFIG_C": count,

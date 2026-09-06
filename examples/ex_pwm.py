@@ -4,11 +4,11 @@ from labjackt7 import LabjackT7
 
 
 def main():
-    # pulse_example()
+    pulse_example()
 
     # pwm_example()
 
-    pwm_loopback_example()
+    # pwm_loopback_example()
 
     return
 
@@ -23,7 +23,7 @@ def pulse_example():
         channel='DIO0', 
         frequency = pulse_freq,
         duty_cycle = pulse_duty,
-        count = 10000
+        count = 1
     )
 
 
@@ -65,7 +65,7 @@ def pwm_loopback_example():
     data = lj.stream.read()
     lj.stream.stop()
     lj.pwm.stop()
-    
+
     _plot_stream(data)
 
 
