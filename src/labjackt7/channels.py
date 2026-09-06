@@ -2,7 +2,14 @@
 from enum import auto
 from strenum import StrEnum
 
-class T7Channel(StrEnum):
+'''
+Only certain channels support streaming.
+StreamChannel supports input streaming
+StreamOutChannel supports ouptut streaming
+
+'''
+
+class StreamChannel(StrEnum):
     AIN0  = auto()
     AIN1  = auto()
     AIN2  = auto()
@@ -27,7 +34,7 @@ class T7Channel(StrEnum):
     DAC0  = auto()
     DAC1  = auto()
 
-class StreamChannel(StrEnum):
+class StreamOutChannel(StrEnum):
     DAC0 = auto()
     DAC1 = auto()
     FIO_STATE = auto()

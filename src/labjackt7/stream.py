@@ -1,8 +1,8 @@
 from labjack import ljm
 import numpy as np
+from dataclasses import dataclass
 from datetime import datetime
-from .channels import StreamChannel
-from labjackt7 import channels
+from .channels import StreamChannel, StreamOutChannel
 
 '''
 Streaming 
@@ -29,7 +29,7 @@ LJM_PeriodicStreamOut(
 class StreamConfig():
     def __init__(self, scan_rate:int=100000, reads_per_scan:int=1, settling_time:int=0, resolution_index:int=0, clock_source:int=0):
         self.scan_rate:int = scan_rate
-        self.reads_per_scan:int = reads_per_scan
+        self.scans_per_read:int = scan_rate
         self.settling_time:int = settling_time
         self.resolution_index:int = resolution_index
         self.clock_source:int = clock_source
@@ -38,11 +38,20 @@ class StreamConfig():
     def to_dict(self):
         return {
             'SCAN_RATE': self.scan_rate,
-            'READS_PER_SCAN': self.reads_per_scan,
+            'SCANS_PER_READ': self.scans_per_read,
             'STREAM_SETTLING_US': self.settling_time,
             'STREAM_RESOLUTION_INDEX': self.resolution_index,
             'STREAM_CLOCK_SOURCE': self.clock_source,
         }
+
+
+@dataclass(slots=True)
+class StreamChannelInfo:
+    target: int | str | StreamChannel
+    target_addr: int
+    data_size: int
+    stream_out_index: int
+    scan_index: int
 
 
 class Stream():
@@ -50,18 +59,19 @@ class Stream():
         self.labjack = labjack
         self.stop()
 
-        self.scan_rate:int          = self._device_scanRate()
-        self.reads_per_scan:int     = 1
+        self.scan_rate:int          = 0
+        self.scans_per_read:int     = 1
         self.settling_time:int      = 0
         self.resolution_index:int   = 0
         self.clock_source:int       = 0 
         self.stream_buffer_size:int|None = None # default 4096, max 32768
-#         ljm.eWriteName(handle, "STREAM_TRIGGER_INDEX", 0)
+        self.stream_trigger_index = 0 #todo: implement   ljm.eWriteName(handle, "STREAM_TRIGGER_INDEX", 0)
 
         self.scan_list:list       = []
+        self.details:list[StreamChannelInfo] = []
         self.configure(
             scan_rate=self.scan_rate,
-            reads_per_scan=self.reads_per_scan,
+            scans_per_read=self.scans_per_read,
             settling_time=self.settling_time,
             resolution_index=self.resolution_index,
             clock_source=self.clock_source,
@@ -71,18 +81,16 @@ class Stream():
 
     def configure(self, 
             scan_rate:int|None=None, 
-            reads_per_scan:int|None=None, 
+            scans_per_read:int|None=None, 
             settling_time:int|None=None, 
             resolution_index:int|None=None, 
             clock_source:int|None=None,
             stream_buffer_size:int|None=None
         ):
         if scan_rate is not None:
-            self.scan_rate = scan_rate
-            # this is applied by start()
-        if reads_per_scan is not None:
-            self.reads_per_scan = reads_per_scan
-            # this is applied by ??
+            self.scan_rate = scan_rate # this is applied by start()
+        if scans_per_read is not None:
+            self.scans_per_read = scans_per_read # this is applied by ??
         if settling_time is not None:
             self.settling_time = settling_time
             ljm.eWriteName(self.labjack.handle, "STREAM_SETTLING_US", self.settling_time)
@@ -102,9 +110,14 @@ class Stream():
     def start(self) -> float:
         self.stop()
 
+        if self.scan_rate == 0:
+            raise ValueError("Scan rate must be > 0")
+        # if self.scans_per_read == 1 or self.scans_per_read > self.scan_rate:
+        #     raise ValueError("Set scans per read")
+
         actual_scan_rate = ljm.eStreamStart(
             handle = self.labjack.handle,
-            scansPerRead = self.scan_rate // self.reads_per_scan,
+            scansPerRead = self.scans_per_read,
             numAddresses = len(self.scan_list),
             aScanList = self.scan_list,
             scanRate = self.scan_rate
@@ -120,16 +133,19 @@ class Stream():
             pass
 
 
-    def read(self):
+    def read(self, verbose=False):
         aData, deviceScanBacklog, ljmScanBacklog = ljm.eStreamRead(self.labjack.handle)
-        # print(f"Stream Read: {len(aData)} samples, deviceScanBacklog={deviceScanBacklog}, ljmScanBacklog={ljmScanBacklog}")
-        return aData
+        if verbose:
+            print(f"Stream Read: {len(aData)} samples, deviceScanBacklog={deviceScanBacklog}, ljmScanBacklog={ljmScanBacklog}")
+        shaped_data = self._reshape_data(aData, len(self.scan_list))
+        return shaped_data
 
 
     def add_output(self, 
-            target:StreamChannel|str, 
-            data:list, 
+            target:StreamOutChannel|str|int, 
+            data:list|np.ndarray, 
             stream_out_index:int = 0,
+            loop:int = 1
         ):
         ''' 
         Setup a periodic output stream on output device 'target' using buffer stream_out_index.
@@ -139,27 +155,62 @@ class Stream():
 
         Use configure() to setup scan_rate and clock source
         '''
-        self.stream_out_index = stream_out_index
+        self.stop()
+
+        if len(data) > 16384:
+            raise ValueError('Stream output data cannot exceed 16384 values')
+        if isinstance(data, np.ndarray):
+            data = data.tolist()
 
         target_addr = ljm.nameToAddress(target)[0]
         scan_addr   = ljm.nameToAddress(f'STREAM_OUT{stream_out_index}')[0]
         self.scan_list.append(scan_addr)
 
-        if (self.scan_rate <= 0) or (self.scan_rate > self._device_scanRate()*len(self.scan_list)):
-            print(f'WARNING: ScanRate {self.scan_rate} for {len(self.scan_list)} channels is invalid')
+        if (self.scan_rate <= 0):
+            raise ValueError(f'WARNING: ScanRate {self.scan_rate} for {len(self.scan_list)} channels is invalid')
+        if (self.scan_rate > self._device_scanRate()*len(self.scan_list)):
+            raise ValueError(f'WARNING: ScanRate {self.scan_rate} for {len(self.scan_list)} channels exceeds max {self._device_scanRate()}')
 
-        ljm.periodicStreamOut(
-            handle         = self.labjack.handle,
-            streamOutIndex = stream_out_index,
-            targetAddr     = target_addr,
-            scanRate       = self.scan_rate,
-            numValues      = len(data),
-            aWriteData     = data,
-        ) 
+        i = stream_out_index
+        buffer_size = 1 << (2 * len(data)).bit_length()
+        # buffer_size = 16384
+        ljm.eWriteName(self.labjack.handle, f'STREAM_OUT{i}_ENABLE', 0)
+        aSetup = {
+            f'STREAM_OUT{i}_TARGET': target_addr,
+            f'STREAM_OUT{i}_BUFFER_ALLOCATE_NUM_BYTES': buffer_size,
+            f'STREAM_OUT{i}_ENABLE': 1,
+            f'STREAM_OUT{i}_LOOP_NUM_VALUES': len(data),
+        }
+        ljm.eWriteNames(self.labjack.handle,
+            len(aSetup), aSetup.keys(), aSetup.values())
+        if isinstance(data[0], float):
+            ljm.eWriteNameArray(self.labjack.handle,
+                f'STREAM_OUT{i}_BUFFER_F32', len(data), data)
+        elif isinstance(data[0], int):
+            ljm.eWriteNameArray(self.labjack.handle,
+                f'STREAM_OUT{i}_BUFFER_U16', len(data), data)
+        else:
+            raise TypeError('Data must be float or int type')
+        ljm.eWriteName(self.labjack.handle, 
+            f'STREAM_OUT{i}_SET_LOOP', loop)
+
+        self.details.append(
+            StreamChannelInfo(
+                stream_out_index=stream_out_index,
+                scan_index = len(self.scan_list)-1,
+                target = target,
+                target_addr = target_addr,
+                data_size = len(data)
+            )
+        )
         return
     
 
-    def add_outputs(self, targets:list[StreamChannel|str], data:list[list], stream_out_indexes:list[int]):
+    def add_outputs(self, 
+            targets:list[StreamOutChannel]|list[str]|list[int], 
+            data:list[list], 
+            stream_out_indexes:list[int]
+        ):
         if (len(data) != len(targets)) or (len(data) != len(stream_out_indexes)):
             raise ValueError("Length of data, targets, and stream_out_indexes must match")
         for t, d, i in zip(targets, data, stream_out_indexes):
@@ -176,20 +227,7 @@ class Stream():
 
         Use config to setup scan rate,a reads per scan, settling time, resolution index, and clock source.
         '''
-        scan_list = []
         self.scan_list.append(ljm.nameToAddress(self._chan_to_ain(channel))[0])
-
-#         aNamesValues = {
-#             "AIN_ALL_NEGATIVE_CH" : ljm.constants.GND,
-#             "AIN0_RANGE" : 10.0,
-#             "AIN1_RANGE" : 10.0,
-#             "AIN2_RANGE" : 10.0,
-#             "AIN3_RANGE" : 10.0,
-#         }
-#         numFrames = len(aNamesValues)
-#         ljm.eWriteNames(handle, numFrames, list(aNamesValues.keys()), list(aNamesValues.values()))
-
-
         return
 
 
@@ -202,33 +240,43 @@ class Stream():
     def ain(self, 
             channels:str|int|StreamChannel|list[str]|list[int]|list[StreamChannel], 
             scan_rate:int|None=None,
-            reads_per_scan:int|None=None,
+            scans_per_read:int|None=None,
             settling_time:int|None=None,
             resolution_index:int|None=None,
             clock_source:int|None=None,
-            #range:int|None=None
+            range:int|list[int]|None=None
         ):
         '''
         ain() simple analog streaming input.
-        Available channels are AIN0 and AINx.  
+        Available channels are AINx.  
+        This is similar to stream.input(), 
+        but it will accept channel as integer x for AINx
+        and set channel ranges.
         '''
 
-        scan_list = []
-        if channels is not None and isinstance(channels, list):
-            for c in channels:
-                scan_list.append(ljm.nameToAddress(self._chan_to_ain(c))[0])
-        elif channels is not None:
-            scan_list = [ljm.nameToAddress(self._chan_to_ain(channels))[0]]
-        self.scan_list = scan_list
+        _channels = []
+        if isinstance(channels, list):
+            _channels:list[str] = [self._chan_to_ain(c) for c in channels]
+        else:
+            _channels:list[str] = [self._chan_to_ain(channels)]
 
-        self.configure(scan_rate, reads_per_scan, settling_time, resolution_index, clock_source)
-        self.start()
-        
-        return
+        #TODO: Set channel ranges
+        if range is not None:
+            print("Setting range not yet supported")
+
+        return self.input(
+            _channels,
+            scan_rate=scan_rate,
+            scans_per_read=scans_per_read,
+            settling_time=settling_time,
+            resolution_index=resolution_index,
+            clock_source=clock_source,
+
+        ) 
 
     def aout(self, 
-            channels:str|int|StreamChannel|list[str]|list[int]|list[StreamChannel],
-            data:list,
+            channels:str|int|StreamOutChannel|list[str]|list[int]|list[StreamOutChannel],
+            data:list|np.ndarray,
             scan_rate:int|None=None,
             clock_source:int|None=None,
             loop:int=0,
@@ -237,29 +285,62 @@ class Stream():
         ''' 
         aout() simple analog streaming output.
         Available channels are DAC0 and DAC1.
-        Data should be one list of data per channel.
+        Data should be one list (or array) of data per channel.
 
         Leave parameters as None to use the current configuration.
         '''
-        if isinstance(channels, (int, str)):
+        if isinstance(channels, (int, str, StreamOutChannel)):
             _channels = [channels]
             _data = [data]
-        elif isinstance(data, list) and len(data) == len(channels):
+        elif isinstance(data, np.ndarray):
+            _channels = channels
+            _data = data#.tolist()
+        elif isinstance(data, list):
             _channels = channels
             _data = data
         else:
             raise ValueError("Analog stream-out data must have one column per output channel.")
 
+        #_data = [d.tolist() if isinstance(d, np.ndarray) else d for d in _data]
+        if len(_data) != len(_channels):
+            raise ValueError("Analog stream-out data must have one column per output channel.")
+
+        _stream_indeces = list(range(len(_channels)))
         self.configure(scan_rate=scan_rate, clock_source=clock_source)
-        # todo LOOP
-        for i, ch in enumerate(_channels):
-            self.add_output(_data[i], self._chan_to_dac(ch), stream_out_index=i)
+        self.add_outputs(_channels, _data, stream_out_indexes=_stream_indeces)
 
         actual_scan_rate = self.start()
         return actual_scan_rate
 
+
+    def input(self, 
+            channels:str|StreamChannel|list[str]|list[StreamChannel], 
+            scan_rate:int|None=None,
+            scans_per_read:int|None=None,
+            settling_time:int|None=None,
+            resolution_index:int|None=None,
+            clock_source:int|None=None,
+            #range:int|None=None
+        ):
+        '''
+        Stream streaming input, analog or digital.
+        Available channels are AIN0 and AINx.  
+        Digital channels are and DIOx or *IO_STATE.
+        '''
+
+        scan_list = []
+        if isinstance(channels, list):
+            scan_list = [ljm.nameToAddress(c)[0] for c in channels]
+        elif isinstance(channels, (str,StreamChannel)):
+            scan_list = [ljm.nameToAddress(channels)[0]]
+        self.scan_list = scan_list
+
+        self.configure(scan_rate, scans_per_read, settling_time, resolution_index, clock_source)
+        actuatal_scan_rate = self.start()
+        return actuatal_scan_rate 
+
     def dout(self, 
-            channels:str|int|list[str|int],
+            channels:str|int|StreamOutChannel|list[str]|list[int]|list[StreamOutChannel],
             data:list,
             scan_rate:int|None=None,
             loop=0,
@@ -275,12 +356,15 @@ class Stream():
             _channels = channels
             _data = data
         else:
-            raise ValueError("Analog stream-out data must have one column per output channel.")
+            raise ValueError("Stream-out data must have one column per output channel.")
 
         self.configure(scan_rate=scan_rate)
 
         for i, ch in enumerate(_channels):
-            self.add_output(_data[i], self._chan_to_dio(ch), stream_out_index=i)
+            self.add_output(
+                self._chan_to_dio(ch),
+                _data[i], 
+                stream_out_index=i)
 
         return
 
@@ -374,19 +458,23 @@ class Stream():
             'DIO_DIRECTION': bitmask
         })
 
-    #todo: access these from the analog module
-    def _chan_to_ain(self, channel):
-        if type(channel) is int:
+    def _chan_to_ain(self, channel) -> str:
+        if isinstance(channel, int):
             channel = f'AIN{channel}'
+        if isinstance(channel, StreamChannel):
+            channel = str(channel)
         return channel
     
-    def _chan_to_dac(self, channel):
-        if type(channel) is int:
+    def _chan_to_dac(self, channel) -> str:
+        if isinstance(channel, int):
             channel = f'DAC{channel}'
+        if isinstance(channel, StreamOutChannel):
+            channel = str(channel)
         return channel
 
-    #todo access this from the digital module
-    def _chan_to_dio(self, channel):
+    def _chan_to_dio(self, channel) -> str:
         if isinstance(channel,  int):
             channel = f'DIO{channel}'
+        if isinstance(channel, StreamChannel) or isinstance(channel, StreamOutChannel):
+            channel = str(channel)
         return channel
