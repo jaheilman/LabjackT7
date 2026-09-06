@@ -30,6 +30,8 @@ class PatternGenerator:
             max_speed = 100000
         elif self.labjack.deviceType == ljm.constants.dtT4:
             max_speed = 40000
+        else:
+            raise ValueError("Labjack must be T4 or T7")
 
         cutoff = max_samples / max_speed
         if period >= cutoff:
@@ -55,7 +57,7 @@ class PatternGenerator:
         data = self.labjack.digital.array_to_bitmask(data, list(sequence.keys()))
         self.labjack.stream.configure()
         self.labjack.stream.set_inhibit(list(sequence.keys()))
-        self.labjack.stream.DOut(data, scanRate, loop=1)
+        self.labjack.stream.dout(data, scanRate, loop=1)
 
     def stream_raw(self, channel, sequence, scanRate, loop=True):
         ''' A lower level single-channel streaming alternative to the start() method allowing the

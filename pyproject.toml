@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "labjackt7"
+version = "0.3"
+description = "High-level Labjack T7 interface, warapping LJM Python library for data acquisition and waveform or pattern generation"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Jeremiah Heilman", email = "jeremiah.heilman@gmail.com" },
+]
+dependencies = [
+  "labjack-ljm",
+  "numpy",
+  "StrEnum",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/labjackt7"]

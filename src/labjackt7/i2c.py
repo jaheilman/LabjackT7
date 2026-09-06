@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# from .core import LabjackT7
+
 class I2C:
     def __init__(self, labjack):
         self.labjack = labjack
@@ -14,18 +14,21 @@ class I2C:
                                 bit 1: restart without stopping
                                 bit 2: disable clock stretching
         '''
-        self.labjack._write_dict({'I2C_SDA_DIONUM': sda,
-                                  'I2C_SCL_DIONUM': scl,
-                                  'I2C_SPEED_THROTTLE': speed,
-                                  'I2C_OPTIONS': options})
+        self.labjack._write_dict({
+            'I2C_SDA_DIONUM': sda,
+            'I2C_SCL_DIONUM': scl,
+            'I2C_SPEED_THROTTLE': speed,
+            'I2C_OPTIONS': options
+        })
 
     def read(self, addr, reg, read_bytes):
         # Set the TX bytes. We are sending 1 byte for the address.
         buffer = [reg]
-        self.labjack._write_dict({'I2C_SLAVE_ADDRESS': addr,
-                                  'I2C_NUM_BYTES_TX': len(buffer),
-                                  'I2C_NUM_BYTES_RX': read_bytes,
-                                  })
+        self.labjack._write_dict({
+            'I2C_SLAVE_ADDRESS': addr,
+            'I2C_NUM_BYTES_TX': len(buffer),
+            'I2C_NUM_BYTES_RX': read_bytes,
+        })
         self.labjack._write_array('I2C_DATA_TX', buffer)
         self.labjack._write('I2C_GO', 1)
 
@@ -34,17 +37,19 @@ class I2C:
     def write(self, addr, reg, data):
         buffer = [reg]
         buffer.extend(data)
-        self.labjack._write_dict({'I2C_SLAVE_ADDRESS': addr,
-                                  'I2C_NUM_BYTES_TX': len(buffer),
-                                  'I2C_NUM_BYTES_RX': 0,
-                                  })
+        self.labjack._write_dict({
+            'I2C_SLAVE_ADDRESS': addr,
+            'I2C_NUM_BYTES_TX': len(buffer),
+            'I2C_NUM_BYTES_RX': 0,
+        })
         self.labjack._write_array('I2C_DATA_TX', buffer)
         self.labjack._write('I2C_GO', 1)
 
     def check(self, addr):
         ''' Query whether the target addr is an I2C channel '''
-        self.labjack._write_dict({'I2C_SLAVE_ADDRESS': addr,
-                                  'I2C_NUM_BYTES_TX': 0,
-                                  'I2C_NUM_BYTES_RX': 0,
-                                  })
+        self.labjack._write_dict({
+            'I2C_SLAVE_ADDRESS': addr,
+            'I2C_NUM_BYTES_TX': 0,
+            'I2C_NUM_BYTES_RX': 0,
+        })
         return self.labjack._query('I2C_ACKS') == 1

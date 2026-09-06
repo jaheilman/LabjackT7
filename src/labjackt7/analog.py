@@ -25,9 +25,9 @@ class Analog():
 
     def ain(self, channel):
         ''' Read a channel and return the voltage.
-         
+
             Args:
-                channel (int or str): number of the target DAC channel.
+                channel (int or str): number of the target ADC channel.
         '''
         channel = self._chan_to_ain(channel)
         return self.labjack._query(channel)
