@@ -23,7 +23,7 @@ class Analog():
             "AIN_ALL_RANGE" : range
         })
 
-    def ain(self, channel):
+    def ain(self, channel:int|str):
         ''' Read a channel and return the voltage.
 
             Args:
@@ -32,7 +32,7 @@ class Analog():
         channel = self._chan_to_ain(channel)
         return self.labjack._query(channel)
 
-    def aout(self, channel, value):
+    def aout(self, channel:int|str, value:int|float):
         ''' Output an analog voltage.
 
             Args:

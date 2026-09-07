@@ -4,7 +4,7 @@ from .temperature import Temperature
 from .pwm import PWM
 from .spi import SPI
 from .i2c import I2C
-from .stream import Stream, StreamConfig
+from .stream import Stream
 from .waveform_generator import WaveformGenerator
 from .pattern_generator import PatternGenerator
 from .labjackt7 import LabjackT7

@@ -1,7 +1,7 @@
 import time
 import numpy as np
 from labjackt7 import LabjackT7
-from labjackt7.channels import StreamChannel
+from labjackt7.channels import StreamChannel, StreamOutChannel
 
 
 def main():
@@ -13,6 +13,7 @@ def main():
 
     # ex_analog_stream_in()
     # ex_analog_stream_in_2ch()
+    ex_analog_stream_in_hardway()
 
     # ex_digital_stream_in()
     # ex_digitalport_stream_in()
@@ -22,10 +23,11 @@ def main():
 
     ### STREAMING OUTPUTS ###
 
-    ex_stream_dout()
+    # ex_stream_dout()
     
     # ex_stream_aout()
     # ex_stream_aout_2ch()
+    # ex_stream_aout_hardway()
 
     ## LJM PeriodicStreamOut is supported by labjackt7.waveform
     ## In theory this can mix analog and digital outputs.
@@ -38,7 +40,7 @@ def main():
     # ex_digital_loopback()
 
     ## Stream output and input at the same time!
-    # ex_analog_in_and_analog_out()
+    ex_pwm_out_analog_in()
 
 
 
@@ -134,6 +136,32 @@ def ex_analog_stream_in_2ch():
     print(f'Scanned for {stop_time - start_time}s')
     print(f"Len: {len(stream_samples)}, Mean: {np.mean(stream_samples)}, Min: {np.min(stream_samples)}, Max: {np.max(stream_samples)}")
     print(f"Actual scan rate: {actual_scan_rate}")
+
+
+def ex_analog_stream_in_hardway():
+    print("Starting STREAM ANALOG IN (the hard way) example...")
+    lj = LabjackT7()
+
+    scan_rate = 10000
+    scans_per_read = 1000
+
+    lj.stream.configure(scan_rate=scan_rate, scans_per_read=scans_per_read)
+    lj.stream.add_input('AIN0')
+
+    all_samples = []
+    start_time = time.perf_counter()
+    actual_scan_rate = lj.stream.start() 
+    print(f"Streaming started at {actual_scan_rate} scans/s")
+    for i in range(2):
+        samples = lj.stream.read(verbose=True)
+        add_data(all_samples, samples)
+    lj.stop()
+    print(f"Scanned for {time.perf_counter() - start_time}s")
+
+    _plot_stream(all_samples)
+    pause = True
+
+
 
 
 def ex_digital_stream_in():
@@ -310,8 +338,9 @@ def ex_stream_aout():
     sinewave = 1.1 + np.sin(2 * np.pi * sine_frequency * np.arange(samples) / scan_rate)
     data = sinewave.tolist()
 
-    # channels options - DAC0 or DAC1
-    #channels = 0 # this means DAC0
+    ## channel options - DAC0 or DAC1
+    ## Ways to set this channel:
+    #channels = 0    # for aout this will convert to DAC0
     #channels = 'DAC0' 
     channels = StreamChannel.DAC0   # StreamChannel helps clarify what channels 
                                     # are supported in stream operations
@@ -319,7 +348,7 @@ def ex_stream_aout():
     # you can pass them them as a list:
     #channels = [0] # or ['DAC0'] or [StreamChannel.DAC0]
 
-    # and you can provide multiple channels at one:
+    # and you can provide multiple channels at once:
     #channels = [StreamChannel.DAC0, StreamChannel.DAC1]
     #data = [sinewave, 0.5*sinewave] # DAC1 is half the amplitude of DAC0
 
@@ -353,7 +382,7 @@ def ex_stream_aout_2ch():
     # channels = ['DAC0']
 
     data = [sinewave, sinewave]
-    channels = [StreamChannel.DAC0, StreamChannel.DAC1]  
+    channels = [StreamOutChannel.DAC0, StreamOutChannel.DAC1]  
 
 
     actual_scan_rate = lj.stream.aout(channels, data, scan_rate=scan_rate)
@@ -362,6 +391,34 @@ def ex_stream_aout_2ch():
 
 
     print("Streaming for 3 seconds...")
+    time.sleep(3)
+    lj.stop()
+
+
+
+def ex_stream_aout_hardway():
+    print("Starting STREAM ANALOG OUT example...")
+    lj = LabjackT7()
+
+    scan_rate = 50000
+    sine_frequency = 1000
+    cycles_in_buffer = 1
+    samples = scan_rate // sine_frequency * cycles_in_buffer
+    data = np.zeros(samples)
+    data[:samples//2] = 5.0
+
+    channels = 'DAC0'   # StreamChannel helps clarify what channels 
+
+    print('INFO:')
+    print(f'  Scan rate: {scan_rate}')
+    print(f'  Data buffer size: {len(data)}')
+
+    lj.stream.configure(scan_rate=scan_rate)
+    lj.stream.add_output(channels, data)
+    actual_scan_rate = lj.stream.start() 
+    print(f"Streaming started at {actual_scan_rate} scans/s")
+    print(f"  Streaming for 3 seconds...")
+    print(f"  DIO0 will output a sinewave signal")
     time.sleep(3)
     lj.stop()
 
@@ -410,34 +467,12 @@ def ex_analog_out_waveform():
     print("Stopping output")
 
 
-def ex_analog_in_and_analog_out():
+def ex_pwm_out_analog_in():
     '''
-    Stream 150Hz out on DAC0 and sample in on AIN0.
+    Stream pwm out on DAC0 and sample in on AIN0.
 
     add_outputs is useful for mixing simulatanous in and out.
     '''
-    lj = LabjackT7()
-    scan_rate = 10000
-    lj.stream.configure(scan_rate=scan_rate, scans_per_read=scan_rate//2)
-
-    # Setup 150Hz
-    sine_wave_frequency = 50
-    samples_per_period = scan_rate // sine_wave_frequency
-    sinewave = 1.1 + np.sin(2.0 * np.pi * np.arange(samples_per_period) / samples_per_period)
-    sinewave = sinewave.tolist()
-
-
-    # Add this waveform to output on DAC0, fed from buffer 0
-    lj.stream.add_output(
-        StreamChannel.DAC0,     # channels
-        sinewave,          # data 
-        0,
-    )
-
-    lj.stream.add_input(
-        "AIN0",  # channels 
-
-    )
 
     '''
     Alright, pay attention.
@@ -454,23 +489,50 @@ def ex_analog_in_and_analog_out():
     '''
 
 
-    print("Starting stream out on DAC0 and in on AIN0 for 5s...")
-    stream_samples = []
-    lj.stream.start()
-    print(f"Streaming at {scan_rate} scans/s and collecting four 4 seconds (in 4 reads)...")
+    print("Starting STREAM ANALOG OUT and IN example...")
+    lj = LabjackT7()
+
+    scan_rate = 10000
+    sig_period = 2e-3 #3 / 60
+    pulse_length = 500e-6
+    cycles_in_buffer = 1
+    samples = int(scan_rate * sig_period * cycles_in_buffer)
+    data = np.zeros(samples)
+    data[:int(samples*pulse_length/sig_period)] = 4.0
+
+    channels = 'DAC0'   # StreamChannel helps clarify what channels 
+
+    print('INFO:')
+    print(f'  Scan rate: {scan_rate}')
+    print(f'  Data buffer size: {len(data)}')
+
+    scans_per_read = 100
+    lj.stream.configure(scan_rate=scan_rate)
+    lj.stream.add_output(channels, data)
+
+    # add input
+    lj.stream.configure(scans_per_read=scans_per_read)
+    lj.stream.add_input('AIN0')
+    # lj.stream.add_input('AIN1')
+    # lj.stream.add_input('AIN2')
+    # lj.stream.add_input('AIN3')
+
+    scans = 3
+    all_samples = []
     start_time = time.perf_counter()
-    while (time.perf_counter() - start_time < 1):
-        time.sleep(.25)
-        samples = lj.stream.read()
-        stream_samples.extend(samples)
-    stop_time = time.perf_counter()
-    lj.stream.stop()
-    print("Stopping output")
+    actual_scan_rate = lj.stream.start() 
 
-    print(f'Sampled for {stop_time - start_time}s')
-    print(f'Collected {len(stream_samples)} samples')
-    _plot_stream([stream_samples])
+    print(f"Streaming started at {actual_scan_rate} scans/s")
+    for i in range(scans):
+        samples = lj.stream.read(verbose=True)
+        add_data(all_samples, samples)
 
+    lj.stop()
+    lj.analog.aout('DAC0', 0)
+    print(f"Streaming stopped after {time.perf_counter() - start_time} s")
+
+    _plot_stream(all_samples)
+    pause = True
 
 
 
@@ -519,7 +581,7 @@ def plot_in_out_stream(dio1_reads, ain0_reads):
         plt.show()
 
 
-    # helper function to extend collected samples
+# helper function to extend collected samples
 def add_data(data, new_data):
     if not data:
         data.extend([list(values) for values in new_data])
