@@ -95,6 +95,9 @@ class Stream():
     def get_scan_list_inputs(self):
         return [x.scan_addr for x in self.detailed_scan_list if x.is_input]
 
+    def get_scan_list_outputs(self):
+        return [x.scan_addr for x in self.detailed_scan_list if not x.is_input]
+
 
     def start(self) -> float:
         self.stop()
@@ -125,10 +128,13 @@ class Stream():
 
 
     def read(self, verbose=False):
-        scan_list = self.get_scan_list()
         aData, deviceScanBacklog, ljmScanBacklog = ljm.eStreamRead(self.labjack.handle)
         if verbose:
             print(f"Stream Read: {len(aData)} samples, deviceScanBacklog={deviceScanBacklog}, ljmScanBacklog={ljmScanBacklog}")
+        # hack - there are extra data if there is an output channel
+        output_channels = self.get_scan_list_outputs()
+        if len(output_channels) > 0:
+            aData = aData[:-self.scans_per_read*len(output_channels)]
         shaped_data = self._reshape_data(aData)
         return shaped_data
 

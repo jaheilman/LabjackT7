@@ -13,7 +13,7 @@ def main():
 
     # ex_analog_stream_in()
     # ex_analog_stream_in_2ch()
-    ex_analog_stream_in_hardway()
+    # ex_analog_stream_in_hardway()
 
     # ex_digital_stream_in()
     # ex_digitalport_stream_in()
@@ -40,8 +40,8 @@ def main():
     # ex_digital_loopback()
 
     ## Stream output and input at the same time!
-    ex_pwm_out_analog_in()
-
+    # ex_pwm_out_analog_in()
+    ex_pwm_out_analog_in_complex()
 
 
     return
@@ -513,7 +513,60 @@ def ex_pwm_out_analog_in():
     # add input
     lj.stream.configure(scans_per_read=scans_per_read)
     lj.stream.add_input('AIN0')
-    # lj.stream.add_input('AIN1')
+    lj.stream.add_input('AIN1')
+    lj.stream.add_input('AIN2')
+    lj.stream.add_input('AIN3')
+
+    scans = 3
+    all_samples = []
+    start_time = time.perf_counter()
+    actual_scan_rate = lj.stream.start() 
+
+    print(f"Streaming started at {actual_scan_rate} scans/s")
+    for i in range(scans):
+        samples = lj.stream.read(verbose=True)
+        add_data(all_samples, samples)
+
+    lj.stop()
+    lj.analog.aout('DAC0', 0)
+    print(f"Streaming stopped after {time.perf_counter() - start_time} s")
+
+    _plot_stream(all_samples)
+    pause = True
+
+
+
+def ex_pwm_out_analog_in_complex():
+    '''
+    Stream pwm out on DAC0 and sample in on AIN0.
+
+    add_outputs is useful for mixing simulatanous in and out.
+    '''
+
+    print("Starting STREAM ANALOG OUT and IN example...")
+    lj = LabjackT7()
+
+    scan_rate = 10000
+    sig_period = 2e-3 #3 / 60
+    pulse_length = 500e-6
+    cycles_in_buffer = 1
+    samples = int(scan_rate * sig_period * cycles_in_buffer)
+    data = np.zeros(samples)
+    data[:int(samples*pulse_length/sig_period)] = 4.0
+
+    print('INFO:')
+    print(f'  Scan rate: {scan_rate}')
+    print(f'  Data buffer size: {len(data)}')
+
+    scans_per_read = 100
+    lj.stream.configure(scan_rate=scan_rate)
+    lj.stream.add_output('DAC0', data)
+    lj.stream.add_output('DAC1', data)
+
+    # add input
+    lj.stream.configure(scans_per_read=scans_per_read)
+    lj.stream.add_input('AIN0')
+    lj.stream.add_input('AIN1')
     # lj.stream.add_input('AIN2')
     # lj.stream.add_input('AIN3')
 
