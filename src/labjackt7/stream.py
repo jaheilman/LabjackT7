@@ -127,14 +127,32 @@ class Stream():
             pass
 
 
-    def read(self, verbose=False):
+    def read(self, verbose=False) -> list:
+        '''
+        read values for INPUTS in the stream buffer. 
+        
+        Call this periodically during a scan to get  scansPerRead * number_input_channels of data.
+        Data will be sorted into lists in order of scan_list inputs.
+        Any OUTPUT channels are not represented in the data: they are just omitted. 
+
+        NOTE: when input and output channels are in the scan list, the ljm driver reserves enough memory
+        for all channels.  However, only input channels are collected, leaving a bunch of zeros at the end
+        of the buffer.  These are removed.
+        '''
         aData, deviceScanBacklog, ljmScanBacklog = ljm.eStreamRead(self.labjack.handle)
         if verbose:
             print(f"Stream Read: {len(aData)} samples, deviceScanBacklog={deviceScanBacklog}, ljmScanBacklog={ljmScanBacklog}")
-        # hack - there are extra data if there is an output channel
+
+        # remove empty buffer values caused by output channels
         output_channels = self.get_scan_list_outputs()
         if len(output_channels) > 0:
-            aData = aData[:-self.scans_per_read*len(output_channels)]
+            # check that the length of data appears to be total channels * scans_per_read
+            buffer_over_provisioned = len(aData) == self.scans_per_read*len(self.detailed_scan_list)
+            # check that the end of the buffer is zeros:
+            tail = self.scans_per_read*len(output_channels)
+            empty_tail = all(aData[-tail:] == 0)
+            if buffer_over_provisioned and empty_tail:
+                aData = aData[:-self.scans_per_read*len(output_channels)]
         shaped_data = self._reshape_data(aData)
         return shaped_data
 

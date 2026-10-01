@@ -13,7 +13,7 @@ voltage = labjack.analog.ain(0)
 print(f"voltage {voltage}")
 
 # Set DAC1 to 3 V
-labjack.analog.aout('DAC1', 1)
+labjack.analog.aout('DAC1', 3)
 voltage = labjack.analog.ain(0)
 print(f"voltage {voltage}")
 
